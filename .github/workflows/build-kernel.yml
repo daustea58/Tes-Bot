@@ -1,0 +1,157 @@
+name: Build Kernel Surya
+
+# Workflow ini dipicu secara manual oleh bot Telegram lewat GitHub API
+# (workflow_dispatch), bukan lewat push/pull_request.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Sumber kernel: stratosphere / stormbreaker"
+        required: true
+        default: "stormbreaker"
+        type: choice
+        options:
+          - stratosphere
+          - stormbreaker
+      memkernel:
+        description: "Integrasi MemKernel: Y / M / none"
+        required: true
+        default: "Y"
+        type: choice
+        options:
+          - "Y"
+          - "M"
+          - "none"
+      ksunext:
+        description: "Integrasi KernelSU-Next"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+# Timeout 6 jam karena proses build kernel cukup lama di runner gratis
+env:
+  BUILD_TIMEOUT_MINUTES: 360
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      # 1. Checkout repository (berisi scripts/, config, dll)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Install dependency yang dibutuhkan untuk build kernel Android
+      - name: Install dependency build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bc bison flex zip curl \
+            clang sparse libssl-dev libelf-dev \
+            git python3 python3-pip lld
+
+      # Cache toolchain Proton Clang supaya build berikutnya lebih cepat
+      - name: Cache Proton Clang
+        id: cache-clang
+        uses: actions/cache@v4
+        with:
+          path: proton-clang
+          key: proton-clang-${{ runner.os }}-v1
+
+      # 3 & 4. Clone kernel source dan toolchain, dengan retry manual
+      - name: Clone kernel source & toolchain
+        run: |
+          chmod +x scripts/build.sh scripts/config.sh
+          bash scripts/build.sh \
+            --source "${{ github.event.inputs.source }}" \
+            --memkernel "${{ github.event.inputs.memkernel }}" \
+            --ksunext "${{ github.event.inputs.ksunext }}" \
+            --stage clone
+
+      # 5 & 6. Integrasi MemKernel + KernelSU-Next (dijalankan dari build.sh)
+      - name: Integrasi MemKernel & KernelSU-Next
+        run: |
+          bash scripts/build.sh \
+            --source "${{ github.event.inputs.source }}" \
+            --memkernel "${{ github.event.inputs.memkernel }}" \
+            --ksunext "${{ github.event.inputs.ksunext }}" \
+            --stage integrate
+
+      # 7-9. Apply config defconfig, export env, lalu build
+      - name: Build kernel
+        run: |
+          bash scripts/build.sh \
+            --source "${{ github.event.inputs.source }}" \
+            --memkernel "${{ github.event.inputs.memkernel }}" \
+            --ksunext "${{ github.event.inputs.ksunext }}" \
+            --stage build
+
+      # 10-11. Cek hasil Image.gz-dtb, package pakai AnyKernel3
+      - name: Package kernel jadi ZIP
+        id: package
+        run: |
+          bash scripts/build.sh \
+            --source "${{ github.event.inputs.source }}" \
+            --memkernel "${{ github.event.inputs.memkernel }}" \
+            --ksunext "${{ github.event.inputs.ksunext }}" \
+            --stage package
+          echo "zip_path=$(cat out_zip_path.txt)" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$(basename "$(cat out_zip_path.txt)")" >> "$GITHUB_OUTPUT"
+
+      # 12. Upload ZIP sebagai artifact GitHub Actions
+      - name: Upload artifact ZIP
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.zip_name }}
+          path: ${{ steps.package.outputs.zip_path }}
+          retention-days: 14
+
+      # Simpan log build juga sebagai artifact, untuk /logs di bot
+      - name: Upload log build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_id }}
+          path: build.log
+          retention-days: 14
+
+      # 13. Kirim notifikasi ke Telegram (selalu jalan, baik sukses maupun gagal)
+      - name: Notifikasi Telegram - hasil build
+        if: always()
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ "${{ job.status }}" = "success" ]; then
+            TEXT="✅ Build kernel Surya selesai.%0ASource: ${{ github.event.inputs.source }}%0AMemKernel: ${{ github.event.inputs.memkernel }}%0AKernelSU-Next: ${{ github.event.inputs.ksunext }}%0A%0ADetail: $RUN_URL"
+          else
+            TEXT="❌ Build kernel Surya gagal.%0ASource: ${{ github.event.inputs.source }}%0A%0ACek log: $RUN_URL"
+          fi
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}"
+
+      # 14. Kirim file ZIP langsung ke Telegram kalau ukurannya < 50MB
+      - name: Kirim ZIP ke Telegram
+        if: success()
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ZIP_PATH="${{ steps.package.outputs.zip_path }}"
+          SIZE_MB=$(du -m "$ZIP_PATH" | cut -f1)
+          echo "Ukuran ZIP: ${SIZE_MB}MB"
+          if [ "$SIZE_MB" -lt 50 ]; then
+            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F document=@"${ZIP_PATH}" \
+              -F caption="Kernel Surya hasil build otomatis"
+          else
+            echo "ZIP terlalu besar untuk dikirim langsung, cek artifact di GitHub Actions."
+          fi
+          
