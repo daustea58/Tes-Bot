@@ -1,0 +1,22 @@
+# Contoh systemd service untuk menjalankan bot Telegram terus-menerus di VPS.
+# Simpan sebagai /etc/systemd/system/kernel-bot.service, lalu sesuaikan
+# WorkingDirectory, User, dan nilai environment variable di bawah.
+
+[Unit]
+Description=Kernel Build Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/kernel-bot/bot
+Environment="BOT_TOKEN=isi-token-botfather"
+Environment="GITHUB_TOKEN=isi-personal-access-token"
+Environment="GITHUB_REPO=username/nama-repo"
+Environment="ALLOWED_CHAT_IDS=123456789"
+ExecStart=/usr/bin/python3 bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

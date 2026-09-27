@@ -1,0 +1,27 @@
+# Environment / secrets
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# State bot
+bot/state.json
+
+# Hasil build (jangan commit ke repo)
+kernel_src/
+proton-clang/
+AnyKernel3/
+out/
+*.zip
+*.sha256
+build.log
+out_zip_path.txt
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
