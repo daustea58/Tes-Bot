@@ -79,13 +79,6 @@ stage_clone() {
 
   log "Cloning kernel source dari $REPO_URL"
   retry git clone --depth=1 "${BRANCH_ARGS[@]}" "$REPO_URL" "$KERNEL_DIR"
-
-  if [[ ! -d "$CLANG_DIR" ]] || [[ -z "$(ls -A "$CLANG_DIR" 2>/dev/null)" ]]; then
-    log "Cloning Proton Clang toolchain"
-    retry git clone --depth=1 "$PROTON_CLANG" "$CLANG_DIR"
-  else
-    log "Proton Clang sudah ada di cache, skip clone."
-  fi
 }
 
 # ── Stage: integrate (MemKernel + KernelSU-Next) ────────────────
@@ -140,12 +133,8 @@ stage_build() {
 
   export ARCH="$ARCH"
   export SUBARCH="$ARCH"
-  export PATH="$CLANG_DIR/bin:$PATH"
   export CROSS_COMPILE="aarch64-linux-gnu-"
   export CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
-  export CLANG_TRIPLE="aarch64-linux-gnu-"
-  export LLVM=1
-  export LLVM_IAS=1
 
   log "Membuat defconfig: $DEFCONFIG_NAME"
   make O="$OUT_DIR" "$(basename "$DEFCONFIG_NAME")" 2>&1 | tee -a "$LOG_FILE"
