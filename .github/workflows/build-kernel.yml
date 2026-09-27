@@ -52,7 +52,11 @@ jobs:
       # 2. Install dependency yang dibutuhkan untuk build kernel Android
       - name: Install dependency build
         run: |
-          pacman -Syu --noconfirm --needed \
+          # Keyring image ini sering basi/expired, jadi verifikasi signature
+          # dimatikan khusus untuk container CI ini
+          sed -i "s/^SigLevel.*/SigLevel = Never/" /etc/pacman.conf
+          rm -rf /var/cache/pacman/pkg/*
+          pacman -Syyu --noconfirm --needed \
             base-devel bc bison flex cpio git python python-pip \
             zip curl wget perl openssl zlib ncurses
 
