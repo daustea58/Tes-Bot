@@ -39,36 +39,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    # Build di dalam container Arch Linux — toolchain-nya sudah disusun
-    # supaya cocok sama kernel Xiaomi lawas seperti surya, jadi nggak
-    # bentrok host-tools vs cross-compile-tools kayak di Ubuntu polos.
-    container:
-      image: panchajanya1999/archlinux:latest
     steps:
       # 1. Checkout repository (berisi scripts/, config, dll)
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # 2. Install dependency yang dibutuhkan untuk build kernel Android
+      #    Pakai GNU cross-compiler resmi (bukan Proton Clang) karena
+      #    kernel surya lawas ini belum di-patch untuk kompilasi Clang
       - name: Install dependency build
         run: |
-          # Keyring image ini sering basi/expired, jadi verifikasi signature
-          # dimatikan khusus untuk container CI ini
-          sed -i "s/^SigLevel.*/SigLevel = Never/" /etc/pacman.conf
-          rm -rf /var/cache/pacman/pkg/*
-          pacman -Syyu --noconfirm --needed \
-            base-devel bc bison flex cpio git python python-pip \
-            zip curl wget perl openssl zlib ncurses
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bc bison flex zip curl \
+            sparse libssl-dev libelf-dev \
+            git python3 python3-pip \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu
 
-      # Cache toolchain Proton Clang supaya build berikutnya lebih cepat
-      - name: Cache Proton Clang
-        id: cache-clang
-        uses: actions/cache@v4
-        with:
-          path: proton-clang
-          key: proton-clang-${{ runner.os }}-v1
-
-      # 3 & 4. Clone kernel source dan toolchain, dengan retry manual
+      # 3 & 4. Clone kernel source (toolchain sekarang dari apt, bukan clone)
       - name: Clone kernel source & toolchain
         run: |
           chmod +x scripts/build.sh scripts/config.sh
