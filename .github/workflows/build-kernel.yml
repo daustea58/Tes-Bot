@@ -39,6 +39,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    # Build di dalam container Arch Linux — toolchain-nya sudah disusun
+    # supaya cocok sama kernel Xiaomi lawas seperti surya, jadi nggak
+    # bentrok host-tools vs cross-compile-tools kayak di Ubuntu polos.
+    container:
+      image: panchajanya1999/archlinux:latest
     steps:
       # 1. Checkout repository (berisi scripts/, config, dll)
       - name: Checkout repository
@@ -47,11 +52,9 @@ jobs:
       # 2. Install dependency yang dibutuhkan untuk build kernel Android
       - name: Install dependency build
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential bc bison flex zip curl \
-            clang sparse libssl-dev libelf-dev \
-            git python3 python3-pip lld
+          pacman -Syu --noconfirm --needed \
+            base-devel bc bison flex cpio git python python-pip \
+            zip curl wget perl openssl zlib ncurses
 
       # Cache toolchain Proton Clang supaya build berikutnya lebih cepat
       - name: Cache Proton Clang
@@ -154,4 +157,3 @@ jobs:
           else
             echo "ZIP terlalu besar untuk dikirim langsung, cek artifact di GitHub Actions."
           fi
-          
