@@ -148,10 +148,10 @@ stage_build() {
   export LLVM_IAS=1
 
   log "Membuat defconfig: $DEFCONFIG_NAME"
-  make O="$OUT_DIR" "$(basename "$DEFCONFIG_NAME")" 2>&1 | tee -a "$LOG_FILE"
+  make O="$OUT_DIR" HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld "$(basename "$DEFCONFIG_NAME")" 2>&1 | tee -a "$LOG_FILE"
 
   log "Mulai build kernel (make -j$(nproc))"
-  make -j"$(nproc)" O="$OUT_DIR" 2>&1 | tee -a "$LOG_FILE"
+  make -j"$(nproc)" O="$OUT_DIR" HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld 2>&1 | tee -a "$LOG_FILE"
 
   IMAGE_PATH="$OUT_DIR/arch/$ARCH/boot/Image.gz-dtb"
   if [[ ! -f "$IMAGE_PATH" ]]; then
